@@ -1,77 +1,75 @@
 import streamlit as st
 import numpy as np
+import cv2
 from PIL import Image
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 
-st.set_page_config(page_title="Glove QC System", page_icon="🛡️", layout="centered")
+st.set_page_config(page_title="Live Glove QC System", page_icon="🛡️", layout="centered")
 
-st.markdown("""
-    <style>
-    .main { background-color: #0b0f19; }
-    h1 { color: #38bdf8; text-align: center; font-size: 1.5rem; }
-    .stMetric { background-color: #1e293b; padding: 10px; border-radius: 8px; border: 1px solid #334155; text-align: center; }
-    </style>
-""", unsafe_allow_html=True)
+st.title("🛡️ Live Glove Print QC Inspector")
+st.write("ਕැමරාව ලයිව් ඔන් කර තබා, ග්ලවුස් එක පෙන්වූ සැනින් Real-time Pass/Reject බලන්න.")
 
-st.title("🛡️ Glove Print QC System")
+# Initialize session state for master reference
+if 'master_np' not in st.session_state:
+    st.session_state.master_np = None
 
-# Initialize Session State
-if 'pass_count' not in st.session_state:
-    st.session_state.pass_count = 0
-if 'fail_count' not in st.session_state:
-    st.session_state.fail_count = 0
-if 'total_count' not in st.session_state:
-    st.session_state.total_count = 0
-if 'master_image' not in st.session_state:
-    st.session_state.master_image = None
-
-# --- STEP 1: MASTER SETUP ---
-st.subheader("1️⃣ Master Print Setup")
-master_file = st.camera_input("ප්‍රධාන (Master) Glove Print එකේ ෆොටෝ එකක් ගන්න")
+# --- STEP 1: MASTER REFERENCE UPLOAD ---
+st.subheader("1️⃣ Master Reference Setup")
+master_file = st.file_uploader("ප්‍රධාන (Master) Glove Print එකේ ෆොටෝ එකක් Upload කරන්න", type=["jpg", "png", "jpeg"])
 
 if master_file is not None:
-    st.session_state.master_image = Image.open(master_file).convert("RGB")
-    st.success("✅ Master Print සාර්ථකව Save විය!")
-    st.image(st.session_state.master_image, caption="Master Reference", width=200)
+    master_img = Image.open(master_file).convert("RGB").resize((150, 150))
+    st.session_state.master_np = np.array(master_img.convert("L"))
+    st.success("✅ Master Reference සාර්ථකව සකස් විය!")
+    st.image(master_img, caption="Master Print", width=150)
 
-# --- STEP 2: LIVE QC INSPECTION ---
-if st.session_state.master_image is not None:
+# --- STEP 2: LIVE VIDEO STREAM QC ---
+if st.session_state.master_np is not None:
     st.markdown("---")
-    st.subheader("2️⃣ Live Inspection Check")
+    st.subheader("2️⃣ Live Camera Feed (Real-time QC)")
+    st.info("💡 පහත 'START' බොත්තම ඔබා කැමරාව ලයිව් ආරම්භ කරන්න.")
     
-    test_file = st.camera_input("පරීක්ෂා කළ යුතු Glove එකේ ෆොටෝ එකක් ගන්න (Live Check)")
-    
-    if test_file is not None:
-        test_image = Image.open(test_file).convert("RGB")
-        
-        # Image Comparison
-        master_arr = np.array(st.session_state.master_image.resize((150, 150)).convert("L"))
-        test_arr = np.array(test_image.resize((150, 150)).convert("L"))
-        
-        diff = np.mean(np.abs(master_arr.astype(float) - test_arr.astype(float)))
-        score = max(0, int(100 - (diff / 255 * 100 * 1.5)))
-        
-        st.metric(label="Match Score", value=f"{score}%")
-        
-        # Threshold: 65%
-        if score >= 65:
-            st.success(f"🟢 PASS / OK ({score}%)")
-            st.session_state.pass_count += 1
-        else:
-            st.error(f"🔴 REJECT / FAIL ({score}%)")
-            st.session_state.fail_count += 1
+    master_arr = st.session_state.master_np
+
+    class GloveTransformer(VideoTransformerBase):
+        def transform(self, frame):
+            img = frame.to_ndarray(format="bgr24")
             
-        st.session_state.total_count = st.session_state.pass_count + st.session_state.fail_count
+            # Get video dimensions and crop center region
+            h, w, _ = img.shape
+            crop_w, crop_h = int(w * 0.4), int(h * 0.3)
+            x, y = int((w - crop_w) / 2), int((h - crop_h) / 2)
+            
+            # Crop region of interest
+            roi = img[y:y+crop_h, x:x+crop_w]
+            
+            # Convert to grayscale and resize for comparison
+            roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            roi_resized = cv2.resize(roi_gray, (150, 150))
+            
+            # Compare with master image
+            diff = np.mean(np.abs(master_arr.astype(float) - roi_resized.astype(float)))
+            score = max(0, int(100 - (diff / 255 * 100 * 1.5)))
+            
+            # Determine Pass or Reject
+            if score >= 65:
+                status_text = f"PASS: {score}%"
+                box_color = (0, 255, 0) # Green
+            else:
+                status_text = f"REJECT: {score}%"
+                box_color = (0, 0, 255) # Red
+            
+            # Draw bounding box and text on the live video frame
+            cv2.rectangle(img, (x, y), (x + crop_w, y + crop_h), box_color, 3)
+            cv2.putText(img, status_text, (x, max(30, y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, box_color, 2, cv2.LINE_AA)
+            
+            return img
 
-    # --- SUMMARY DASHBOARD ---
-    st.markdown("---")
-    st.subheader("📊 QC Counters")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total", st.session_state.total_count)
-    col2.metric("Pass", st.session_state.pass_count)
-    col3.metric("Reject", st.session_state.fail_count)
-
-    if st.button("🔄 Reset Counters"):
-        st.session_state.pass_count = 0
-        st.session_state.fail_count = 0
-        st.session_state.total_count = 0
-        st.rerun()
+    webrtc_streamer(
+        key="glove-qc-live",
+        video_processor_factory=GloveTransformer,
+        rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}),
+        media_stream_constraints={"video": {"facingMode": "environment"}, "audio": False}
+    )
+else:
+    st.warning("⚠️ කරුණාකර මුලින්ම ඉහතින් Master Glove Print එකක් Upload කරන්න.")
