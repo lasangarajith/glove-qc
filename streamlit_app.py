@@ -2,10 +2,10 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 
-st.set_page_config(page_title="Glove QC System", page_icon="🛡️", layout="centered")
+st.set_page_config(page_title="Glove Print QC Inspector", page_icon="🛡️", layout="centered")
 
-st.title("🛡️ Glove Print QC System")
-st.write("Phone එකෙන් Master Print එක සහ Inspection prints පහසුවෙන් පරීක්ෂා කරන්න.")
+st.title("🛡️ Glove Print QC Inspector")
+st.write("කැමරාව මඟින් Glove Print එක පරීක්ෂා කර Pass/Reject ගණන් බලාගන්න.")
 
 # Initialize Session State Counters
 if 'pass_count' not in st.session_state:
@@ -18,25 +18,25 @@ if 'master_image' not in st.session_state:
     st.session_state.master_image = None
 
 # --- STEP 1: MASTER REFERENCE ---
-st.header("1️⃣ Master Print Setup")
-master_file = st.camera_input("Master Glove එකේ ෆොටෝ එකක් ගන්න")
+st.subheader("1️⃣ Master Print Setup")
+master_file = st.camera_input("ප්‍රධාන (Master) Glove Print එකේ ෆොටෝ එකක් ගන්න")
 
 if master_file is not None:
     st.session_state.master_image = Image.open(master_file).convert("RGB")
-    st.success("✅ Master Reference සාර්ථකව Save විය!")
-    st.image(st.session_state.master_image, caption="Master Print", width=250)
+    st.success("✅ Master Print එක සාර්ථකව Save විය!")
+    st.image(st.session_state.master_image, caption="Master Reference", width=220)
 
-# --- STEP 2: INSPECTION ---
+# --- STEP 2: LIVE QC INSPECTION ---
 if st.session_state.master_image is not None:
     st.markdown("---")
-    st.header("2️⃣ Live Glove QC Inspection")
+    st.subheader("2️⃣ Glove QC Inspection")
     
-    test_file = st.camera_input("පරීක්ෂා කළ යුතු Glove එකේ ෆොටෝ එකක් ගන්න")
+    test_file = st.camera_input("පරීක්ෂා කළ යුතු (Test) Glove එකේ ෆොටෝ එකක් ගන්න")
     
     if test_file is not None:
         test_image = Image.open(test_file).convert("RGB")
         
-        # Compare images (Resize and get mean absolute difference)
+        # Image Comparison Logic
         master_arr = np.array(st.session_state.master_image.resize((150, 150)).convert("L"))
         test_arr = np.array(test_image.resize((150, 150)).convert("L"))
         
@@ -55,15 +55,15 @@ if st.session_state.master_image is not None:
             
         st.session_state.total_count = st.session_state.pass_count + st.session_state.fail_count
 
-    # --- RESULTS DASHBOARD ---
+    # --- LIVE DASHBOARD SUMMARY ---
     st.markdown("---")
-    st.subheader("📊 Inspection Summary")
+    st.subheader("📊 QC Summary")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Checked", st.session_state.total_count)
-    col2.metric("Pass (OK)", st.session_state.pass_count)
-    col3.metric("Reject (Fail)", st.session_state.fail_count)
+    col1.metric("Total", st.session_state.total_count)
+    col2.metric("Pass", st.session_state.pass_count)
+    col3.metric("Reject", st.session_state.fail_count)
 
-    if st.button("🔄 Reset All Counters"):
+    if st.button("🔄 Reset Counters"):
         st.session_state.pass_count = 0
         st.session_state.fail_count = 0
         st.session_state.total_count = 0
