@@ -2,12 +2,19 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 
-st.set_page_config(page_title="Glove Print QC Inspector", page_icon="🛡️", layout="centered")
+st.set_page_config(page_title="Glove QC System", page_icon="🛡️", layout="centered")
 
-st.title("🛡️ Glove Print QC Inspector")
-st.write("කැමරාව මඟින් Glove Print එක පරීක්ෂා කර Pass/Reject ගණන් බලාගන්න.")
+st.markdown("""
+    <style>
+    .main { background-color: #0b0f19; }
+    h1 { color: #38bdf8; text-align: center; font-size: 1.5rem; }
+    .stMetric { background-color: #1e293b; padding: 10px; border-radius: 8px; border: 1px solid #334155; text-align: center; }
+    </style>
+""", unsafe_allow_html=True)
 
-# Initialize Session State Counters
+st.title("🛡️ Glove Print QC System")
+
+# Initialize Session State
 if 'pass_count' not in st.session_state:
     st.session_state.pass_count = 0
 if 'fail_count' not in st.session_state:
@@ -17,26 +24,26 @@ if 'total_count' not in st.session_state:
 if 'master_image' not in st.session_state:
     st.session_state.master_image = None
 
-# --- STEP 1: MASTER REFERENCE ---
+# --- STEP 1: MASTER SETUP ---
 st.subheader("1️⃣ Master Print Setup")
 master_file = st.camera_input("ප්‍රධාන (Master) Glove Print එකේ ෆොටෝ එකක් ගන්න")
 
 if master_file is not None:
     st.session_state.master_image = Image.open(master_file).convert("RGB")
-    st.success("✅ Master Print එක සාර්ථකව Save විය!")
-    st.image(st.session_state.master_image, caption="Master Reference", width=220)
+    st.success("✅ Master Print සාර්ථකව Save විය!")
+    st.image(st.session_state.master_image, caption="Master Reference", width=200)
 
 # --- STEP 2: LIVE QC INSPECTION ---
 if st.session_state.master_image is not None:
     st.markdown("---")
-    st.subheader("2️⃣ Glove QC Inspection")
+    st.subheader("2️⃣ Live Inspection Check")
     
-    test_file = st.camera_input("පරීක්ෂා කළ යුතු (Test) Glove එකේ ෆොටෝ එකක් ගන්න")
+    test_file = st.camera_input("පරීක්ෂා කළ යුතු Glove එකේ ෆොටෝ එකක් ගන්න (Live Check)")
     
     if test_file is not None:
         test_image = Image.open(test_file).convert("RGB")
         
-        # Image Comparison Logic
+        # Image Comparison
         master_arr = np.array(st.session_state.master_image.resize((150, 150)).convert("L"))
         test_arr = np.array(test_image.resize((150, 150)).convert("L"))
         
@@ -47,17 +54,17 @@ if st.session_state.master_image is not None:
         
         # Threshold: 65%
         if score >= 65:
-            st.success(f"🟢 STATUS: PASS / OK ({score}%)")
+            st.success(f"🟢 PASS / OK ({score}%)")
             st.session_state.pass_count += 1
         else:
-            st.error(f"🔴 STATUS: REJECT / FAIL ({score}%)")
+            st.error(f"🔴 REJECT / FAIL ({score}%)")
             st.session_state.fail_count += 1
             
         st.session_state.total_count = st.session_state.pass_count + st.session_state.fail_count
 
-    # --- LIVE DASHBOARD SUMMARY ---
+    # --- SUMMARY DASHBOARD ---
     st.markdown("---")
-    st.subheader("📊 QC Summary")
+    st.subheader("📊 QC Counters")
     col1, col2, col3 = st.columns(3)
     col1.metric("Total", st.session_state.total_count)
     col2.metric("Pass", st.session_state.pass_count)
